@@ -79,16 +79,18 @@ function M.extract_container_arg_text(range, line_prefix)
   local text = ''
   for lineIndex = range.lineStart, range.lineEnd do
     local lineText = fn.getline(lineIndex)
-    local extractStart = (lineIndex == range.lineStart) and range.colStart or 0
-    local extractEnd = (lineIndex == range.lineEnd) and (range.colEnd - 1) or #lineText
-
-    if extractStart < extractEnd then
-      local extract = string.sub(lineText, extractStart + 1, extractEnd)
+    local extractStart = (lineIndex == range.lineStart) and range.colStart or 1
+    local extractEnd   = (lineIndex == range.lineEnd) and (range.colEnd - 1) or #lineText
+    if extractStart <= extractEnd then
+      local extract = string.sub(lineText, extractStart, extractEnd)
       extract = extract:gsub('^%s*(.-)%s*$', '%1')
+      -- Remove opening brace if present
+      extract = extract:gsub('^[%(%[%{]', '')
+      -- Remove closing brace if present
+      extract = extract:gsub('[%)%]%}]$', '')
       if vim.startswith(extract, line_prefix) then
         extract = extract:sub(#line_prefix + 1)
       end
-      extract = extract:gsub(',$', ', ')
       text = text .. extract
     end
   end
@@ -134,6 +136,7 @@ function M.extract_container_args(text)
   end
 
   argument = M.trim_argument(argument)
+  argument = argument:gsub(',$', '')
   if #argument > 0 then
     table.insert(arguments, argument)
   end
@@ -160,16 +163,13 @@ function M.wrap_container(range, container, arguments, wrap_brace, tail_comma, l
     local text = container.indent .. line_prefix .. arg
     if index < #arguments or tail_comma then
       text = text .. ','
-    elseif not wrap_brace then
-      text = text .. container.suffix
     end
     fn.append(line, text)
     line = line + 1
-    api.nvim_command(('%d>'):format(line))
   end
 
   if wrap_brace then
-    fn.append(line, container.indent .. line_prefix .. container.suffix)
+    fn.append(line, container.indent .. container.suffix)
   end
 end
 
@@ -187,7 +187,7 @@ function M.unwrap_container(range, container, arguments, padded)
     container.suffix
   )
   fn.setline(range.lineStart, text)
-  api.nvim_command(('silent %d,%dd_'):format(range.lineStart + 1, range.lineEnd))
+  api.nvim_command(string.format('silent %d,%dd_', range.lineStart + 1, range.lineEnd))
 end
 
 -- Get buffer or global setting
