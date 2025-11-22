@@ -28,8 +28,49 @@ function M.validate_range(range)
 end
 
 -- Compare two ranges relative to cursor position
+-- Returns 1 if range1 is closer/smaller, -1 if range2 is closer/smaller, 0 if equal
 function M.compare_ranges(range1, range2)
   local _, line, col, _ = unpack(fn.getpos('.'))
+
+  -- Check if we have complete range information (lineEnd and colEnd)
+  local hasCompleteRange1 = range1.lineEnd and range1.colEnd
+  local hasCompleteRange2 = range2.lineEnd and range2.colEnd
+
+  -- If both ranges are complete and contain the cursor, prefer the smaller (more nested) one
+  if hasCompleteRange1 and hasCompleteRange2 then
+    -- Check if cursor is inside each range
+    local inside1 = (range1.lineStart < line or (range1.lineStart == line and range1.colStart <= col))
+                    and (range1.lineEnd > line or (range1.lineEnd == line and range1.colEnd >= col))
+    local inside2 = (range2.lineStart < line or (range2.lineStart == line and range2.colStart <= col))
+                    and (range2.lineEnd > line or (range2.lineEnd == line and range2.colEnd >= col))
+
+    if inside1 and inside2 then
+      -- Both ranges contain cursor, prefer the smaller (more nested) one
+      local size1 = range1.lineEnd - range1.lineStart
+      local size2 = range2.lineEnd - range2.lineStart
+
+      if size1 < size2 then
+        return 1  -- range1 is smaller (more nested)
+      elseif size1 > size2 then
+        return -1  -- range2 is smaller (more nested)
+      else
+        -- Same line span, compare column span
+        local colSize1 = range1.colEnd - range1.colStart
+        local colSize2 = range2.colEnd - range2.colStart
+        if colSize1 < colSize2 then
+          return 1
+        elseif colSize1 > colSize2 then
+          return -1
+        end
+      end
+    elseif inside1 then
+      return 1  -- Only range1 contains cursor
+    elseif inside2 then
+      return -1  -- Only range2 contains cursor
+    end
+  end
+
+  -- Use original distance-based logic (for incomplete ranges or when cursor is outside)
   local lineDiff1 = range1.lineStart - line
   local colDiff1 = range1.colStart - col
   local lineDiff2 = range2.lineStart - line
