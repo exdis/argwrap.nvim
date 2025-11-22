@@ -550,6 +550,107 @@ describe('argwrap', function()
       local range = argwrap.find_closest_range()
       assert.same({}, range)
     end)
+
+    describe('find_closest_range with nested structures', function()
+      it('should find innermost range when cursor is inside nested braces', function()
+        vim.fn.setline(1, {
+          '{',
+          '  alala = {',
+          "    'asdf',",
+          "    'asdf'",
+          '  }',
+          '  azaza(asdf,asdf) {',
+          "   'zzxcv'",
+          '  }',
+          '}',
+        })
+        -- Place cursor inside azaza's parentheses (line 6, after the opening paren)
+        vim.fn.setpos('.', { 0, 6, 10, 0 })
+        local range = argwrap.find_closest_range()
+
+        -- Should find the () range, not the outer {} ranges
+        assert.equals(6, range.lineStart)
+        -- The opening paren '(' should be around column 9
+        assert.is_true(range.colStart >= 8 and range.colStart <= 10)
+      end)
+
+      it('should prefer parentheses over outer braces when cursor is at function args', function()
+        vim.fn.setline(1, {
+          'config = {',
+          '  func(arg1, arg2)',
+          '}',
+        })
+        -- Place cursor inside func's arguments
+        vim.fn.setpos('.', { 0, 2, 10, 0 })
+        local range = argwrap.find_closest_range()
+
+        -- Should find the () range at line 2, not the {} at line 1
+        assert.equals(2, range.lineStart)
+        assert.equals(2, range.lineEnd)
+      end)
+
+      it('should handle toggle on nested function arguments correctly', function()
+        vim.fn.setline(1, {
+          '{',
+          '  azaza(asdf, qwer) {',
+          "    'zzxcv'",
+          '  }',
+          '}',
+        })
+        -- Place cursor inside azaza's arguments
+        vim.fn.setpos('.', { 0, 2, 12, 0 })
+        argwrap.toggle()
+
+        -- Should wrap only the function arguments, not the entire structure
+        local line2 = vim.fn.getline(2)
+        local line3 = vim.fn.getline(3)
+
+        -- Line 2 should now be the opening with function name and paren
+        assert.is_true(line2:match('azaza') ~= nil)
+        -- Should have wrapped the arguments (line 3 should be an argument, not the original content)
+        assert.is_true(line3:match('asdf') ~= nil or line3:match('qwer') ~= nil)
+        -- Original line 3 content should have moved down
+        assert.is_true(vim.fn.getline(5):match('zzxcv') ~= nil or vim.fn.getline(6):match('zzxcv') ~= nil)
+      end)
+    end)
+
+    -- Also add a test in the describe('compare_ranges') section to verify the fix:
+
+    describe('compare_ranges with nested structures', function()
+      it('should prefer closer range with smaller absolute distance', function()
+        vim.fn.setline(1, {
+          '{',
+          '  func(a, b)',
+          '}',
+        })
+        -- Cursor at line 2, col 10 (inside the parentheses)
+        vim.fn.setpos('.', { 0, 2, 10, 0 })
+
+        -- Inner range: parentheses at line 2
+        local innerRange = { lineStart = 2, colStart = 7, lineEnd = 2, colEnd = 12 }
+        -- Outer range: braces at line 1
+        local outerRange = { lineStart = 1, colStart = 1, lineEnd = 3, colEnd = 1 }
+
+        -- Inner range should be considered closer (return 1)
+        local result = argwrap.compare_ranges(innerRange, outerRange)
+        assert.equals(1, result)
+      end)
+
+      it('should handle ranges on same line by column distance', function()
+        vim.fn.setline(1, 'func1(a) + func2(b)')
+        -- Cursor at col 7 (inside func1's args)
+        vim.fn.setpos('.', { 0, 1, 7, 0 })
+
+        -- First function's parens
+        local range1 = { lineStart = 1, colStart = 6, lineEnd = 1, colEnd = 8 }
+        -- Second function's parens
+        local range2 = { lineStart = 1, colStart = 17, lineEnd = 1, colEnd = 19 }
+
+        -- range1 should be closer (return 1)
+        local result = argwrap.compare_ranges(range1, range2)
+        assert.equals(1, result)
+      end)
+    end)
   end)
 
   describe('toggle', function()

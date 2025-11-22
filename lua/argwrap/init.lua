@@ -28,23 +28,30 @@ function M.validate_range(range)
 end
 
 -- Compare two ranges relative to cursor position
+-- Returns 1 if range1 is closer, -1 if range2 is closer, 0 if equal
 function M.compare_ranges(range1, range2)
   local _, line, col, _ = unpack(fn.getpos('.'))
-  local lineDiff1 = range1.lineStart - line
-  local colDiff1 = range1.colStart - col
-  local lineDiff2 = range2.lineStart - line
-  local colDiff2 = range2.colStart - col
 
+  -- Calculate absolute distances from cursor to range starts
+  local lineDiff1 = math.abs(range1.lineStart - line)
+  local colDiff1 = math.abs(range1.colStart - col)
+  local lineDiff2 = math.abs(range2.lineStart - line)
+  local colDiff2 = math.abs(range2.colStart - col)
+
+  -- First compare by line distance
   if lineDiff1 < lineDiff2 then
-    return 1
+    return 1  -- range1 is closer
   elseif lineDiff1 > lineDiff2 then
-    return -1
-  elseif colDiff1 < colDiff2 then
-    return 1
-  elseif colDiff1 > colDiff2 then
-    return -1
+    return -1  -- range2 is closer
   else
-    return 0
+    -- Lines are equidistant, compare by column
+    if colDiff1 < colDiff2 then
+      return 1  -- range1 is closer
+    elseif colDiff1 > colDiff2 then
+      return -1  -- range2 is closer
+    else
+      return 0  -- exactly equal distance
+    end
   end
 end
 
